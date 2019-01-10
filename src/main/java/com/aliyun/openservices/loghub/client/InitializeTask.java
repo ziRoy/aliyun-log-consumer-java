@@ -3,20 +3,23 @@ package com.aliyun.openservices.loghub.client;
 import com.aliyun.openservices.log.common.Consts.CursorMode;
 import com.aliyun.openservices.loghub.client.config.LogHubCursorPosition;
 import com.aliyun.openservices.loghub.client.interfaces.ILogHubProcessor;
+import com.aliyun.openservices.loghub.client.interfaces.ILogHubProcessorContextReceiver;
 
 public class InitializeTask implements ITask {
 
-	private LogHubClientAdapter mLogHubClientAdapter;
+	private LogHubAbstractClientAdaptor mLogHubClientAdapter;
 	private ILogHubProcessor mProcessor;
+	private String mLogStore;
 	private int mShardId;
 	private LogHubCursorPosition mCursorPosition;
 	private long mCursorStartTime;
 
-	public InitializeTask(ILogHubProcessor processor, LogHubClientAdapter logHubClientAdapter,
-			int shardId,
+	public InitializeTask(ILogHubProcessor processor, LogHubAbstractClientAdaptor logHubClientAdapter,
+			String logStore, int shardId,
 			LogHubCursorPosition cursorPosition, long cursorStartTime) {
 		mProcessor = processor;
 		mLogHubClientAdapter = logHubClientAdapter;
+		mLogStore = logStore;
 		mShardId = shardId;
 		mCursorPosition = cursorPosition;
 		mCursorStartTime = cursorStartTime;
@@ -24,9 +27,12 @@ public class InitializeTask implements ITask {
 
 	public TaskResult call() {
 		try {
+			if (mProcessor instanceof ILogHubProcessorContextReceiver) {
+				((ILogHubProcessorContextReceiver) mProcessor).initialize(new LogHubProcessorContext(mLogStore, mShardId));
+			}
 			mProcessor.initialize(mShardId);
 			boolean is_cursor_persistent = false;
-			String checkPoint = mLogHubClientAdapter.GetCheckPoint(mShardId);
+			String checkPoint = mLogHubClientAdapter.GetCheckPoint(mLogStore, mShardId);
 			String cursor = null;
 			if (checkPoint != null && checkPoint.length() > 0) {
 				is_cursor_persistent = true;
@@ -35,15 +41,15 @@ public class InitializeTask implements ITask {
 				// get cursor from loghub client , begin or end
 				if(mCursorPosition.equals(LogHubCursorPosition.BEGIN_CURSOR))
 				{
-					cursor = mLogHubClientAdapter.GetCursor(mShardId, CursorMode.BEGIN);
+					cursor = mLogHubClientAdapter.GetCursor(mLogStore, mShardId, CursorMode.BEGIN);
 				}
 				else if (mCursorPosition.equals(LogHubCursorPosition.END_CURSOR))
 				{
-					cursor = mLogHubClientAdapter.GetCursor(mShardId, CursorMode.END);
+					cursor = mLogHubClientAdapter.GetCursor(mLogStore, mShardId, CursorMode.END);
 				}
 				else
 				{
-					cursor = mLogHubClientAdapter.GetCursor(mShardId, mCursorStartTime);
+					cursor = mLogHubClientAdapter.GetCursor(mLogStore, mShardId, mCursorStartTime);
 				}
 			}
 			return new InitTaskResult(cursor, is_cursor_persistent);

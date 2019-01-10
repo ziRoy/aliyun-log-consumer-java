@@ -2,17 +2,25 @@ import java.util.List;
 
 import com.aliyun.openservices.log.common.LogGroupData;
 import com.aliyun.openservices.loghub.client.ILogHubCheckPointTracker;
+import com.aliyun.openservices.loghub.client.LogHubProcessorContext;
 import com.aliyun.openservices.loghub.client.exceptions.LogHubCheckPointException;
 import com.aliyun.openservices.loghub.client.interfaces.ILogHubProcessor;
+import com.aliyun.openservices.loghub.client.interfaces.ILogHubProcessorContextReceiver;
 
 
-public class LogHubTestProcessor implements ILogHubProcessor {
-	private int mShard;
+public class LogHubTestProcessor implements ILogHubProcessor, ILogHubProcessorContextReceiver {
 	private long mLastCheckTime = 0;
+	private String mLogStore;
+	private int mShard;
 	@Override
 	public void initialize(int shardId) {
-		System.out.println("initialize shard: " + shardId);
-		mShard = shardId;
+	}
+
+	@Override
+	public void initialize(LogHubProcessorContext context) {
+		mLogStore = context.getLogStoreName();
+		mShard = context.getShardId();
+		System.out.println("initialize: " + mLogStore + "," + mShard);
 	}
 
 	@Override

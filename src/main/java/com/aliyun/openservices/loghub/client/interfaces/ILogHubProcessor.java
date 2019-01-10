@@ -7,6 +7,10 @@ import java.util.List;
 
 public interface ILogHubProcessor {
 
+	/**
+	 * @deprecated use {@link ILogHubProcessorContextReceiver} instead
+	 * @param shardId the shard id to process
+	 */
 	void initialize(int shardId);
 
 	/**

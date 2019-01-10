@@ -13,9 +13,10 @@ public class LogHubConsumer {
 	enum ConsumerStatus {
 		INITIALIZING, PROCESSING, SHUTTING_DOWN, SHUTDOWN_COMPLETE
 	}
+	private String mLogStore;
 	private int mShardId;
 	private String mInstanceName;
-	private LogHubClientAdapter mLogHubClientAdapter;
+	private LogHubAbstractClientAdaptor mLogHubClientAdapter;
 	private DefaultLogHubCheckPointTracker mCheckPointTracker;
 	private ILogHubProcessor mProcessor;
 	private LogHubCursorPosition mCursorPosition;
@@ -39,17 +40,18 @@ public class LogHubConsumer {
 	private long mLastFetchTime = 0;
 	private int mLastFetchCount = 0;
 	private int mLastFetchRawSize = 0;
-	public LogHubConsumer(LogHubClientAdapter logHubClientAdapter,int shardId, String instanceName,
-			ILogHubProcessor processor,
-			ExecutorService executorService,  LogHubCursorPosition cursorPosition, int cursorStartTime, int maxFetchLogGroupSize) {
+
+	public LogHubConsumer(LogHubAbstractClientAdaptor logHubClientAdapter, String logStore, int shardId, String instanceName,
+						  ILogHubProcessor processor, ExecutorService executorService, LogHubCursorPosition cursorPosition, int cursorStartTime, int maxFetchLogGroupSize) {
 		mLogHubClientAdapter = logHubClientAdapter;
+		mLogStore = logStore;
 		mShardId = shardId;
 		mInstanceName = instanceName;
 		mCursorPosition = cursorPosition;
 		mCursorStartTime = cursorStartTime;
 		mProcessor = processor;
 		mCheckPointTracker = new DefaultLogHubCheckPointTracker(logHubClientAdapter,
-				mInstanceName, mShardId);
+				mInstanceName, mLogStore, mShardId);
 		mExecutorService = executorService;
 		mMaxFetchLogGroupSize = maxFetchLogGroupSize;
 	}
@@ -136,7 +138,7 @@ public class LogHubConsumer {
 				if(genFetchTask)
 				{
 					mLastFetchTime = System.currentTimeMillis();
-					LogHubFetchTask task = new LogHubFetchTask(mLogHubClientAdapter,mShardId, mNextFetchCursor, mMaxFetchLogGroupSize);
+					LogHubFetchTask task = new LogHubFetchTask(mLogHubClientAdapter, mLogStore, mShardId, mNextFetchCursor, mMaxFetchLogGroupSize);
 					mFetchDataFeture = mExecutorService.submit(task);
 				}
 				else
@@ -185,7 +187,7 @@ public class LogHubConsumer {
 	private void generateNextTask() {
 		ITask nextTask = null;
 		if (this.mCurStatus.equals(ConsumerStatus.INITIALIZING)) {
-			nextTask = new InitializeTask(mProcessor,mLogHubClientAdapter, mShardId, mCursorPosition , mCursorStartTime);
+			nextTask = new InitializeTask(mProcessor, mLogHubClientAdapter, mLogStore, mShardId, mCursorPosition, mCursorStartTime);
 		} else if (this.mCurStatus.equals(ConsumerStatus.PROCESSING)) {
 			if (mLastFetchedData != null) {
 				mCheckPointTracker.setCursor(mLastFetchedData.mEndCursor);

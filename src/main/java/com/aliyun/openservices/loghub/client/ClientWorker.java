@@ -2,12 +2,14 @@ package com.aliyun.openservices.loghub.client;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import javafx.util.Pair;
 import org.apache.log4j.Logger;
 
 import com.aliyun.openservices.log.common.ConsumerGroup;
@@ -19,24 +21,35 @@ import com.aliyun.openservices.loghub.client.interfaces.ILogHubProcessorFactory;
 
 public class ClientWorker implements Runnable
 {
-	
+	// typedef
+	private class LogStoreShard extends Pair<String, Integer> {
+		public LogStoreShard(String key, Integer value) {
+			super(key, value);
+		}
+	}
 	private final ILogHubProcessorFactory mLogHubProcessorFactory;
 	private final LogHubConfig mLogHubConfig;
 	private final LogHubHeartBeat mLogHubHeartBeat;
 	private boolean mShutDown = false;
-	private final Map<Integer, LogHubConsumer> mShardConsumer = new HashMap<Integer, LogHubConsumer>();
+	private final Map<LogStoreShard, LogHubConsumer> mShardConsumer = new HashMap<LogStoreShard, LogHubConsumer>();
 	private final ExecutorService mExecutorService = Executors.newCachedThreadPool(new LogThreadFactory());
-	private LogHubClientAdapter mLogHubClientAdapter;
+	private LogHubAbstractClientAdaptor mLogHubClientAdapter;
 	private static final Logger logger = Logger.getLogger(ClientWorker.class);
 	private boolean mMainLoopExit = false;
 
 	public ClientWorker(ILogHubProcessorFactory factory, LogHubConfig config) throws LogHubClientWorkerException {
 		mLogHubProcessorFactory = factory;
 		mLogHubConfig = config;
-		mLogHubClientAdapter = new LogHubClientAdapter(
-				config.getLogHubEndPoint(), config.getAccessId(), config.getAccessKey(), config.getStsToken(), config.getProject(),
-				config.getLogStore(), config.getConsumerGroupName(), config.getWorkerInstanceName(), config.isDirectModeEnabled());
-		try 
+		if (mLogHubConfig.isProjectConsumerGroup()) {
+			mLogHubClientAdapter = new LogHubProjectClientAdaptor(
+					config.getLogHubEndPoint(), config.getAccessId(), config.getAccessKey(), config.getStsToken(), config.getProject(),
+					config.getLogStore(), config.getConsumerGroupName(), config.getConsumerName(), config.isDirectModeEnabled());
+		} else {
+			mLogHubClientAdapter = new LogHubClientAdapter(
+					config.getLogHubEndPoint(), config.getAccessId(), config.getAccessKey(), config.getStsToken(), config.getProject(),
+					config.getLogStore(), config.getConsumerGroupName(), config.getConsumerName(), config.isDirectModeEnabled());
+		}
+		try
 		{
 			mLogHubClientAdapter.CreateConsumerGroup((int)(config.getHeartBeatIntervalMillis()*2/1000), config.isConsumeInOrder());
 		} 
@@ -65,21 +78,22 @@ public class ClientWorker implements Runnable
 	{
 		mLogHubClientAdapter.SwitchClient(mLogHubConfig.getLogHubEndPoint(), accessKeyId, accessKey, stsToken);
 	}
-	public void run() {		
+	public void run() {
 		mLogHubHeartBeat.Start();
-		ArrayList<Integer> heldShards = new ArrayList<Integer>();
+		Map<String, ArrayList<Integer>> heldShards = new HashMap<String, ArrayList<Integer>>();
 		while (mShutDown == false) {
 			mLogHubHeartBeat.GetHeldShards(heldShards);
-			for(int shard: heldShards)
-			{
-				LogHubConsumer consumer = getConsumer(shard);
-				consumer.consume();
+			for (Map.Entry<String, ArrayList<Integer>> entry : heldShards.entrySet()) {
+				for (int shard : entry.getValue()) {
+					LogHubConsumer consumer = getConsumer(entry.getKey(), shard);
+					consumer.consume();
+				}
 			}
 			cleanConsumer(heldShards);
 			try {
 				Thread.sleep(mLogHubConfig.getDataFetchIntervalMillis());
 			} catch (InterruptedException e) {
-				
+
 			}
 		}
 		mMainLoopExit = true;
@@ -105,45 +119,43 @@ public class ClientWorker implements Runnable
 		mLogHubHeartBeat.Stop();
 	}
 	
-	private void cleanConsumer(ArrayList<Integer> ownedShard)
+	private void cleanConsumer(Map<String, ArrayList<Integer>> ownedShards)
 	{
-		ArrayList<Integer> removeShards = new ArrayList<Integer>();
-		for (Entry<Integer, LogHubConsumer> shard : mShardConsumer.entrySet())
-		{
-			LogHubConsumer consumer = shard.getValue();
-			if (!ownedShard.contains(shard.getKey()))
-			{
+		for (Iterator<Entry<LogStoreShard, LogHubConsumer>> it = mShardConsumer.entrySet().iterator(); it.hasNext(); ) {
+			Entry<LogStoreShard, LogHubConsumer> entry = it.next();
+			LogHubConsumer consumer = entry.getValue();
+			String logStore = entry.getKey().getKey();
+			Integer shard = entry.getKey().getValue();
+
+			ArrayList<Integer> shards = ownedShards.get(logStore);
+			if (shards == null || !shards.contains(shard)) {
 				consumer.shutdown();
-				logger.info("try to shut down a consumer shard:" + shard.getKey());
+				logger.info("try to shut down a consumer shard:" + logStore + "$" + shard);
 			}
-			if (consumer.isShutdown())
-			{
-				mLogHubHeartBeat.RemoveHeartShard(shard.getKey());
-				removeShards.add(shard.getKey());
-				logger.info("remove a consumer shard:" + shard.getKey());
+			if (consumer.isShutdown()) {
+				mLogHubHeartBeat.RemoveHeartShard(logStore, shard);
+				it.remove();
+				logger.info("remove a consumer shard:" + logStore + "$" + shard);
 			}
-		}
-		for(int shard: removeShards)
-		{
-			mShardConsumer.remove(shard);
 		}
 	}
 	
-	private LogHubConsumer getConsumer(final int shardId)
+	private LogHubConsumer getConsumer(final String logStore, final int shardId)
 	{
-		LogHubConsumer consumer = mShardConsumer.get(shardId);
+	    LogStoreShard logStoreShard = new LogStoreShard(logStore, shardId);
+		LogHubConsumer consumer = mShardConsumer.get(logStoreShard);
 		if (consumer != null)
 		{
 			return consumer;
 		}
-		consumer = new LogHubConsumer(mLogHubClientAdapter,shardId,
+		consumer = new LogHubConsumer(mLogHubClientAdapter, logStore, shardId,
 				mLogHubConfig.getConsumerName(),
 				mLogHubProcessorFactory.generatorProcessor(), mExecutorService,
 				mLogHubConfig.getCursorPosition(),
 				mLogHubConfig.GetCursorStartTime(),
 				mLogHubConfig.getMaxFetchLogGroupSize());
-		mShardConsumer.put(shardId, consumer);
-		logger.info("create a consumer shard:" + shardId);
+		mShardConsumer.put(logStoreShard, consumer);
+		logger.info("create a consumer shard:" + logStore + "$" + shardId);
 		return consumer;
 	}
 }

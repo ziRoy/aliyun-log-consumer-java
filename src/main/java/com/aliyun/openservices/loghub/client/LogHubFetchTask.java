@@ -10,14 +10,16 @@ import com.aliyun.openservices.log.exception.LogException;
 import com.aliyun.openservices.log.response.BatchGetLogResponse;
 
 public class LogHubFetchTask implements ITask {
-	private LogHubClientAdapter mLogHubClientAdapter;
+	private LogHubAbstractClientAdaptor mLogHubClientAdapter;
+	private String mLogStore;
 	private int mShardId;
 	private String mCursor;
 	private int mMaxFetchLogGroupSize;
 	private static final Logger logger = Logger.getLogger(LogHubFetchTask.class);
 
-	public LogHubFetchTask(LogHubClientAdapter logHubClientAdapter, int shardId, String cursor, int maxFetchLogGroupSize) {
+	public LogHubFetchTask(LogHubAbstractClientAdaptor logHubClientAdapter, String logStore, int shardId, String cursor, int maxFetchLogGroupSize) {
 		mLogHubClientAdapter = logHubClientAdapter;
+		mLogStore = logStore;
 		mShardId = shardId;
 		mCursor = cursor;
 		mMaxFetchLogGroupSize = maxFetchLogGroupSize;
@@ -29,7 +31,7 @@ public class LogHubFetchTask implements ITask {
 		{
 			try {
 				BatchGetLogResponse response = mLogHubClientAdapter.BatchGetLogs(
-						mShardId, mMaxFetchLogGroupSize, mCursor);
+						mLogStore, mShardId, mMaxFetchLogGroupSize, mCursor);
 				List<LogGroupData> fetchedData = response.GetLogGroups();
 				logger.debug("shard id = " + mShardId + " cursor = " + mCursor
 						+ " next cursor" + response.GetNextCursor() + " size:"
@@ -65,6 +67,6 @@ public class LogHubFetchTask implements ITask {
 	}
 
 	public void freshCursor() throws NumberFormatException, LogException {
-		mCursor =  mLogHubClientAdapter.GetCursor(mShardId, CursorMode.END);
+		mCursor =  mLogHubClientAdapter.GetCursor(mLogStore, mShardId, CursorMode.END);
 	}
 }

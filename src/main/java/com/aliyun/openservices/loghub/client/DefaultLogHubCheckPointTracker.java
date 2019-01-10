@@ -8,17 +8,19 @@ public class DefaultLogHubCheckPointTracker implements ILogHubCheckPointTracker 
 	private String mTempCheckPoint = "";
 	private String mLastPersistentCheckPoint = "";
 
-	private LogHubClientAdapter mLogHubClientAdapter;
+	private LogHubAbstractClientAdaptor mLogHubClientAdapter;
 	private String mInstanceName;
+	private String mLogStore;
 	private int mShardId;
 	private long mLastCheckTime;
 	// flush the check point every 60 seconds by default
 	private static long DEFAULT_FLUSH_CHECK_POINT_TERVAL_NANOS = 60 * 1000L * 1000 * 1000L;
 
-	public DefaultLogHubCheckPointTracker(LogHubClientAdapter logHubClientAdapter,
-			String instanceName, int shardId) {
+	public DefaultLogHubCheckPointTracker(LogHubAbstractClientAdaptor logHubClientAdapter,
+			String instanceName, String logStore, int shardId) {
 		mLogHubClientAdapter = logHubClientAdapter;
 		mInstanceName = instanceName;
+		mLogStore = logStore;
 		mShardId = shardId;
 		mLastCheckTime = System.nanoTime();
 	}
@@ -66,7 +68,7 @@ public class DefaultLogHubCheckPointTracker implements ILogHubCheckPointTracker 
 		if (toPersistent != null
 				&& toPersistent.equals(mLastPersistentCheckPoint) == false) {
 			try {
-				mLogHubClientAdapter.UpdateCheckPoint(mShardId, mInstanceName, toPersistent);
+				mLogHubClientAdapter.UpdateCheckPoint(mLogStore, mShardId, toPersistent);
 				mLastPersistentCheckPoint = toPersistent;
 			} catch (LogException e) {
 				throw new LogHubCheckPointException(

@@ -279,4 +279,8 @@ public class LogHubConfig implements Serializable {
 	public void setMaxFetchLogGroupSize(int maxFetchLogGroupSize) {
 		this.mMaxFetchLogGroupSize = maxFetchLogGroupSize;
 	}
+
+	public boolean isProjectConsumerGroup() {
+		return mLogStore.matches(".*[\\*\\]\\[\\?]+.*");
+	}
 }

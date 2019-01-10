@@ -178,13 +178,18 @@ public class ClientFetcher {
 	private class ShardListUpdator implements Runnable {	
 		public void run() {
 			try {
-				ArrayList<Integer> heldShards = new ArrayList<Integer>();
+				Map<String, ArrayList<Integer>> heldShards = new HashMap<String, ArrayList<Integer>>();
 				mLogHubHeartBeat.GetHeldShards(heldShards);
-				for(int shard: heldShards)
-				{
-					getConsumer(shard);
+
+				ArrayList<Integer> myShards = heldShards.get(mLogHubConfig.getLogStore());
+				if (myShards != null) {
+					for (int shard : myShards) {
+						getConsumer(shard);
+					}
+					cleanConsumer(myShards);
+				} else {
+					cleanConsumer(new ArrayList<Integer>());
 				}
-				cleanConsumer(heldShards);
 			} catch (Throwable t) {
 
 			}		
@@ -204,7 +209,7 @@ public class ClientFetcher {
 				}
 				if (consumer.isShutdown())
 				{
-					mLogHubHeartBeat.RemoveHeartShard(shard.getKey());
+					mLogHubHeartBeat.RemoveHeartShard(mLogHubConfig.getLogStore(), shard.getKey());
 					mShardConsumer.remove(shard.getKey());
 					removeShards.add(shard.getKey());
 					mShardList.remove(shard.getKey());
@@ -225,7 +230,7 @@ public class ClientFetcher {
 			{
 				return consumer;
 			}
-			consumer = new LogHubConsumer(mLogHubClientAdapter,shardId,
+			consumer = new LogHubConsumer(mLogHubClientAdapter,mLogHubConfig.getLogStore(), shardId,
 					mLogHubConfig.getWorkerInstanceName(),
 					mLogHubProcessorFactory.generatorProcessor(), mExecutorService,
 					mLogHubConfig.getCursorPosition(),
