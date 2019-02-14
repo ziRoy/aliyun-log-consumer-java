@@ -9,10 +9,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import javafx.util.Pair;
 import org.apache.log4j.Logger;
 
-import com.aliyun.openservices.log.common.ConsumerGroup;
 import com.aliyun.openservices.log.exception.LogException;
 import com.aliyun.openservices.loghub.client.config.LogHubConfig;
 import com.aliyun.openservices.loghub.client.exceptions.LogHubClientWorkerException;
@@ -78,6 +76,7 @@ public class ClientWorker implements Runnable
 	{
 		mLogHubClientAdapter.SwitchClient(mLogHubConfig.getLogHubEndPoint(), accessKeyId, accessKey, stsToken);
 	}
+	@Override
 	public void run() {
 		mLogHubHeartBeat.Start();
 		Map<String, ArrayList<Integer>> heldShards = new HashMap<String, ArrayList<Integer>>();
